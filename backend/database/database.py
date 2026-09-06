@@ -1,8 +1,13 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env
+load_dotenv()
 
 # PostgreSQL connection
-DATABASE_URL = "postgresql+psycopg2://postgres:CHARU@localhost:5432/medicase"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Create database engine
 engine = create_engine(DATABASE_URL)
@@ -14,7 +19,7 @@ SessionLocal = sessionmaker(
     bind=engine
 )
 
-# Base class for database models
+# Base class for SQLAlchemy models
 Base = declarative_base()
 
 
