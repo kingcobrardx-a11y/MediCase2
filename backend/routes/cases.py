@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database.database import get_db
 from models.patient import Patient
 from models.case import Case
-from schemas.case import CaseCreate
+from schemas.case import CaseCreate, CaseStatusUpdate
 
 
 router = APIRouter(
@@ -13,8 +13,24 @@ router = APIRouter(
 )
 
 
+# =========================
+# CREATE CASE
+# =========================
+
 @router.post("/")
-def create_case(case: CaseCreate, db: Session = Depends(get_db)):
+def create_case(
+    case: CaseCreate,
+    db: Session = Depends(get_db)
+):
+    # Check if patient exists
+    patient = db.query(Patient).filter(
+        Patient.id == case.patient_id
+    ).first()
+
+    if not patient:
+        return {
+            "message": "Patient not found"
+        }
 
     new_case = Case(
         patient_id=case.patient_id,
@@ -23,7 +39,8 @@ def create_case(case: CaseCreate, db: Session = Depends(get_db)):
         duration=case.duration,
         medical_history=case.medical_history,
         allergies=case.allergies,
-        current_medications=case.current_medications
+        current_medications=case.current_medications,
+        status=case.status
     )
 
     db.add(new_case)
@@ -35,15 +52,56 @@ def create_case(case: CaseCreate, db: Session = Depends(get_db)):
         "case": new_case
     }
 
+
+# =========================
+# GET ALL CASES
+# =========================
+
 @router.get("/")
 def get_cases(db: Session = Depends(get_db)):
     cases = db.query(Case).all()
 
     return cases
 
+
+# =========================
+# GET CASES OF A PATIENT
+# =========================
+
+@router.get("/patient/{patient_id}")
+def get_patient_cases(
+    patient_id: int,
+    db: Session = Depends(get_db)
+):
+    # Check if patient exists
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id
+    ).first()
+
+    if not patient:
+        return {
+            "message": "Patient not found"
+        }
+
+    cases = db.query(Case).filter(
+        Case.patient_id == patient_id
+    ).all()
+
+    return cases
+
+
+# =========================
+# GET SINGLE CASE
+# =========================
+
 @router.get("/{case_id}")
-def get_case(case_id: int, db: Session = Depends(get_db)):
-    case = db.query(Case).filter(Case.id == case_id).first()
+def get_case(
+    case_id: int,
+    db: Session = Depends(get_db)
+):
+    case = db.query(Case).filter(
+        Case.id == case_id
+    ).first()
 
     if not case:
         return {
@@ -52,38 +110,67 @@ def get_case(case_id: int, db: Session = Depends(get_db)):
 
     return case
 
-@router.put("/{case_id}")
-def update_case(
+
+# =========================
+# UPDATE CASE
+# =========================
+
+# =========================
+# UPDATE CASE STATUS
+# =========================
+
+@router.put("/{case_id}/status")
+def update_case_status(
     case_id: int,
-    case: CaseCreate,
+    status_data: CaseStatusUpdate,
     db: Session = Depends(get_db)
 ):
-    existing_case = db.query(Case).filter(Case.id == case_id).first()
+    case = db.query(Case).filter(
+        Case.id == case_id
+    ).first()
 
-    if not existing_case:
+    if not case:
         return {
             "message": "Case not found"
         }
 
-    existing_case.patient_id = case.patient_id
-    existing_case.chief_complaint = case.chief_complaint
-    existing_case.symptoms = case.symptoms
-    existing_case.duration = case.duration
-    existing_case.medical_history = case.medical_history
-    existing_case.allergies = case.allergies
-    existing_case.current_medications = case.current_medications
+    allowed_statuses = [
+        "pending",
+        "under_review",
+        "verified",
+        "completed"
+    ]
+
+    if status_data.status not in allowed_statuses:
+        return {
+            "message": "Invalid status",
+            "allowed_statuses": allowed_statuses
+        }
+
+    case.status = status_data.status
 
     db.commit()
-    db.refresh(existing_case)
+    db.refresh(case)
 
     return {
-        "message": "Case updated successfully",
-        "case": existing_case
+        "message": "Case status updated successfully",
+        "case_id": case.id,
+        "status": case.status
     }
 
+
+# =========================
+# DELETE CASE
+# =========================
+
 @router.delete("/{case_id}")
-def delete_case(case_id: int, db: Session = Depends(get_db)):
-    case = db.query(Case).filter(Case.id == case_id).first()
+def delete_case(
+    case_id: int,
+    db: Session = Depends(get_db)
+):
+    case = db.query(Case).filter(
+        Case.id == case_id
+    ).first()
 
     if not case:
         return {
@@ -96,9 +183,3 @@ def delete_case(case_id: int, db: Session = Depends(get_db)):
     return {
         "message": "Case deleted successfully"
     }
-@router.get("/{patient_id}/cases")
-def get_patient_cases(patient_id: int, db: Session = Depends(get_db)):
-    cases = db.query(Case).filter(Case.patient_id == patient_id).all()
-
-    return cases
-

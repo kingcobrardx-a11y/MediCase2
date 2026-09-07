@@ -19,3 +19,9 @@ class Case(Base):
     medical_history = Column(Text, nullable=True)
     allergies = Column(Text, nullable=True)
     current_medications = Column(Text, nullable=True)
+
+    status = Column(
+        String,
+        default="pending",
+        nullable=False
+    )
