@@ -1,116 +1,242 @@
-/**
- * MediCase API Client (Placeholder / Mock Service)
- *
- * This file serves as a structured placeholder for future backend API integrations
- * (e.g. Express, Node.js, FastAPI, or Django with PostgreSQL/MongoDB).
- * Currently resolves promises using client-side simulated delays.
- */
+const API_BASE_URL = "http://127.0.0.1:8000";
 
-import { initialMockCases } from '../data/mockData';
 
-// In-memory cases store for active session
-let sessionCases = [...initialMockCases];
+// =========================
+// CREATE PATIENT
+// =========================
 
-/**
- * Fetch all patient cases for the Doctor Dashboard
- */
-export async function getCases() {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        success: true,
-        data: sessionCases,
-      });
-    }, 200);
+export async function createPatient(patientData) {
+  const response = await fetch(`${API_BASE_URL}/patients/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patientData),
   });
+
+  if (!response.ok) {
+    throw new Error("Failed to create patient");
+  }
+
+  return await response.json();
 }
 
-/**
- * Fetch a single case by its Unique ID
- */
-export async function getCaseById(caseId) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const found = sessionCases.find((c) => c.id === caseId);
-      if (found) {
-        resolve({
-          success: true,
-          data: found,
-        });
-      } else {
-        reject(new Error(`Case with ID ${caseId} not found.`));
-      }
-    }, 150);
+
+// =========================
+// CREATE CASE
+// =========================
+
+export async function createCase(caseData) {
+  const response = await fetch(`${API_BASE_URL}/cases/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(caseData),
   });
+
+  if (!response.ok) {
+    throw new Error("Failed to create case");
+  }
+
+  return await response.json();
 }
 
-/**
- * Submit a newly completed patient case intake
- */
+
+// =========================
+// SUBMIT COMPLETE CASE
+// =========================
+
 export async function submitCase(newCaseData) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const createdCase = {
-        ...newCaseData,
-        id: newCaseData.id || `MC-${Math.floor(1000 + Math.random() * 9000)}`,
-        createdAt: new Date().toLocaleString('en-US', {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        }),
-        status: newCaseData.status || 'Pending Review',
-      };
 
-      // Add to front of session list
-      sessionCases = [createdCase, ...sessionCases];
-
-      resolve({
-        success: true,
-        message: 'Case successfully submitted for clinical review.',
-        data: createdCase,
-      });
-    }, 300);
+  // 1. Create patient first
+  const patientResponse = await createPatient({
+    name: newCaseData.patientDetails.fullName,
+    age: Number(newCaseData.patientDetails.age),
+    gender: newCaseData.patientDetails.gender,
+    phone: newCaseData.patientDetails.phone,
+    email: newCaseData.patientDetails.email || null,
   });
+
+  const patientId = patientResponse.patient.id;
+
+
+  // 2. Convert frontend data into backend case format
+  const caseData = {
+    patient_id: patientId,
+
+    chief_complaint: newCaseData.chiefComplaint,
+
+    symptoms: newCaseData.symptoms
+      .map((item) => {
+        return `${item.symptom} (${item.severity}, ${item.duration})`;
+      })
+      .join(", "),
+
+    duration: newCaseData.symptoms
+      .map((item) => item.duration)
+      .filter(Boolean)
+      .join(", "),
+
+    medical_history: newCaseData.medicalHistory?.illnesses || null,
+
+    allergies: newCaseData.medicalHistory?.allergies || null,
+
+    current_medications: newCaseData.medications
+      .map((item) => {
+        if (!item.name) return "";
+        return `${item.name} ${item.dosage || ""} ${item.frequency || ""}`.trim();
+      })
+      .filter(Boolean)
+      .join(", "),
+
+    status: "pending",
+  };
+
+
+  // 3. Create case
+  const caseResponse = await createCase(caseData);
+
+  const createdCase = caseResponse.case;
+
+
+  // 4. Return frontend-friendly response
+  return {
+    success: true,
+
+    message: "Case successfully submitted for clinical review.",
+
+    data: {
+      ...newCaseData,
+
+      id: createdCase.id,
+      patientId: patientId,
+      status: createdCase.status,
+      backendCaseId: createdCase.id,
+    },
+  };
 }
 
-/**
- * Update doctor clinical review notes and status
- */
-export async function updateCaseReview(caseId, { doctorNotes, status }) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const index = sessionCases.findIndex((c) => c.id === caseId);
-      if (index !== -1) {
-        sessionCases[index] = {
-          ...sessionCases[index],
-          doctorNotes: doctorNotes ?? sessionCases[index].doctorNotes,
-          status: status ?? sessionCases[index].status,
-        };
-        resolve({
-          success: true,
-          message: 'Case review updated successfully.',
-          data: sessionCases[index],
-        });
-      } else {
-        reject(new Error(`Case with ID ${caseId} not found.`));
-      }
-    }, 200);
-  });
+
+// =========================
+// GET ALL CASES
+// =========================
+
+export async function getCases() {
+
+  const response = await fetch(`${API_BASE_URL}/cases/`);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch cases");
+  }
+
+  const data = await response.json();
+
+  return {
+    success: true,
+    data,
+  };
 }
 
-/**
- * Future AI Question Generator Hook (Mocked)
- */
-export async function generateAIQuestions(chiefComplaint = '') {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        success: true,
-        questions: [
-          'What specific time of day or activity triggers or worsens your symptoms?',
-          'Have you noticed any related sensory sensations (e.g. dizziness, tingling, numbness, or vision changes)?',
-          'Have any over-the-counter remedies, rest, or heat/ice packs provided temporary relief?',
-        ],
-      });
-    }, 250);
-  });
+
+// =========================
+// GET SINGLE CASE
+// =========================
+
+export async function getCaseById(caseId) {
+
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${caseId}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch case");
+  }
+
+  const data = await response.json();
+
+  return {
+    success: true,
+    data,
+  };
+}
+
+
+// =========================
+// UPDATE CASE STATUS
+// =========================
+
+export async function updateCaseStatus(caseId, status) {
+
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${caseId}/status`,
+    {
+      method: "PUT",
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify({
+        status,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to update case status");
+  }
+
+  return await response.json();
+}
+
+
+// =========================
+// DOCTOR REVIEW
+// =========================
+
+export async function updateCaseReview(
+  caseId,
+  { doctorNotes, status }
+) {
+
+  // First update case status
+  const statusResponse = await updateCaseStatus(
+    caseId,
+    status
+  );
+
+  return {
+    success: true,
+
+    message: "Case review updated successfully.",
+
+    data: {
+      caseId,
+      doctorNotes,
+      status: statusResponse.status,
+    },
+  };
+}
+
+
+// =========================
+// AI QUESTIONS - TEMPORARY MOCK
+// =========================
+
+export async function generateAIQuestions(
+  chiefComplaint = ""
+) {
+
+  return {
+    success: true,
+
+    questions: [
+      "What specific time of day or activity triggers or worsens your symptoms?",
+
+      "Have you noticed any related sensations such as dizziness, tingling, numbness, or blurred vision?",
+
+      "Have any remedies, rest, hot/cold compresses, or over-the-counter medications offered relief?",
+    ],
+  };
 }
