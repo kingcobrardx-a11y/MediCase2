@@ -78,14 +78,21 @@ export async function submitCase(newCaseData) {
       .filter(Boolean)
       .join(", "),
 
-    medical_history: newCaseData.medicalHistory?.illnesses || null,
+    medical_history:
+      newCaseData.medicalHistory?.illnesses || null,
 
-    allergies: newCaseData.medicalHistory?.allergies || null,
+    allergies:
+      newCaseData.medicalHistory?.allergies || null,
 
     current_medications: newCaseData.medications
       .map((item) => {
         if (!item.name) return "";
-        return `${item.name} ${item.dosage || ""} ${item.frequency || ""}`.trim();
+
+        return `${item.name} ${
+          item.dosage || ""
+        } ${
+          item.frequency || ""
+        }`.trim();
       })
       .filter(Boolean)
       .join(", "),
@@ -104,17 +111,61 @@ export async function submitCase(newCaseData) {
   return {
     success: true,
 
-    message: "Case successfully submitted for clinical review.",
+    message:
+      "Case successfully submitted for clinical review.",
 
     data: {
       ...newCaseData,
 
       id: createdCase.id,
+
       patientId: patientId,
+
       status: createdCase.status,
+
       backendCaseId: createdCase.id,
     },
   };
+}
+
+
+// =========================
+// UPLOAD DOCUMENT
+// =========================
+
+export async function uploadDocument(
+  caseId,
+  file,
+  documentType = null
+) {
+  const formData = new FormData();
+
+  formData.append("case_id", caseId);
+
+  if (documentType) {
+    formData.append(
+      "document_type",
+      documentType
+    );
+  }
+
+  formData.append("file", file);
+
+  const response = await fetch(
+    `${API_BASE_URL}/documents/upload`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to upload document"
+    );
+  }
+
+  return await response.json();
 }
 
 
@@ -123,11 +174,14 @@ export async function submitCase(newCaseData) {
 // =========================
 
 export async function getCases() {
-
-  const response = await fetch(`${API_BASE_URL}/cases/`);
+  const response = await fetch(
+    `${API_BASE_URL}/cases/`
+  );
 
   if (!response.ok) {
-    throw new Error("Failed to fetch cases");
+    throw new Error(
+      "Failed to fetch cases"
+    );
   }
 
   const data = await response.json();
@@ -144,13 +198,14 @@ export async function getCases() {
 // =========================
 
 export async function getCaseById(caseId) {
-
   const response = await fetch(
     `${API_BASE_URL}/cases/${caseId}`
   );
 
   if (!response.ok) {
-    throw new Error("Failed to fetch case");
+    throw new Error(
+      "Failed to fetch case"
+    );
   }
 
   const data = await response.json();
@@ -166,8 +221,10 @@ export async function getCaseById(caseId) {
 // UPDATE CASE STATUS
 // =========================
 
-export async function updateCaseStatus(caseId, status) {
-
+export async function updateCaseStatus(
+  caseId,
+  status
+) {
   const response = await fetch(
     `${API_BASE_URL}/cases/${caseId}/status`,
     {
@@ -184,7 +241,9 @@ export async function updateCaseStatus(caseId, status) {
   );
 
   if (!response.ok) {
-    throw new Error("Failed to update case status");
+    throw new Error(
+      "Failed to update case status"
+    );
   }
 
   return await response.json();
@@ -200,16 +259,18 @@ export async function updateCaseReview(
   { doctorNotes, status }
 ) {
 
-  // First update case status
-  const statusResponse = await updateCaseStatus(
-    caseId,
-    status
-  );
+  // Update case status
+  const statusResponse =
+    await updateCaseStatus(
+      caseId,
+      status
+    );
 
   return {
     success: true,
 
-    message: "Case review updated successfully.",
+    message:
+      "Case review updated successfully.",
 
     data: {
       caseId,
@@ -227,7 +288,6 @@ export async function updateCaseReview(
 export async function generateAIQuestions(
   chiefComplaint = ""
 ) {
-
   return {
     success: true,
 
