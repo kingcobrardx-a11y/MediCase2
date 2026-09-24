@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import {
   BrowserRouter,
   Routes,
@@ -28,9 +29,8 @@ import {
   submitCase,
   updateCaseReview,
   uploadDocument,
+  getDoctorDashboard,
 } from './services/api';
-
-import { initialMockCases } from './data/mockData';
 
 import './App.css';
 
@@ -95,6 +95,156 @@ const emptyCaseTemplate = {
 
   documents: [],
 };
+
+
+// =====================================================
+// CONVERT BACKEND DASHBOARD CASE → FRONTEND CASE
+// =====================================================
+
+function convertBackendCase(backendCase) {
+  // Backend dashboard response structure:
+  //
+  // {
+  //   case_id: 5,
+  //   case: {
+  //     chief_complaint: "...",
+  //     symptoms: "...",
+  //     duration: "...",
+  //     medical_history: "...",
+  //     allergies: "...",
+  //     current_medications: "..."
+  //   },
+  //   patient: {
+  //     id: 1,
+  //     name: "...",
+  //     age: 22,
+  //     gender: "Male",
+  //     phone: "...",
+  //     email: "..."
+  //   },
+  //   documents: [...],
+  //   review: {
+  //     review_id: 1,
+  //     status: "verified",
+  //     notes: "..."
+  //   }
+  // }
+
+  const backendCaseData = backendCase.case || {};
+  const patient = backendCase.patient || {};
+  const review = backendCase.review || {};
+
+  // -----------------------------------------------------
+  // Convert symptoms string → frontend symptoms array
+  // -----------------------------------------------------
+
+  const symptomsText = backendCaseData.symptoms || '';
+
+  let symptoms = [];
+
+  if (symptomsText) {
+    symptoms = symptomsText
+      .split(', ')
+      .map((item) => {
+        // Example:
+        // "Fever (Moderate, 2 days)"
+
+        const match = item.match(
+          /^(.*?)\s*\((.*?),\s*(.*?)\)$/
+        );
+
+        if (match) {
+          return {
+            symptom: match[1],
+            severity: match[2],
+            duration: match[3],
+          };
+        }
+
+        return {
+          symptom: item.trim(),
+          severity: 'Moderate',
+          duration: backendCaseData.duration || '',
+        };
+      });
+  }
+
+  // -----------------------------------------------------
+  // Convert backend status → frontend status
+  // -----------------------------------------------------
+
+  let frontendStatus = 'Pending Review';
+
+  if (review.status === 'verified') {
+    frontendStatus = 'Reviewed';
+  } else if (review.status === 'completed') {
+    frontendStatus = 'Reviewed';
+  } else if (backendCaseData.status === 'completed') {
+    frontendStatus = 'Reviewed';
+  } else if (backendCaseData.status === 'under_review') {
+    frontendStatus = 'Pending Review';
+  } else if (backendCaseData.status === 'pending') {
+    frontendStatus = 'Pending Review';
+  }
+
+  // -----------------------------------------------------
+  // Return frontend-compatible case object
+  // -----------------------------------------------------
+
+  return {
+    id: backendCase.case_id,
+
+    patientId: patient.id,
+
+    patientDetails: {
+      fullName: patient.name || '',
+      age: patient.age || '',
+      gender: patient.gender || '',
+      phone: patient.phone || '',
+      email: patient.email || '',
+    },
+
+    chiefComplaint:
+      backendCaseData.chief_complaint || '',
+
+    symptoms,
+
+    duration:
+      backendCaseData.duration || '',
+
+    medicalHistory: {
+      illnesses:
+        backendCaseData.medical_history || '',
+      surgeries: '',
+      allergies:
+        backendCaseData.allergies || '',
+    },
+
+    medications: backendCaseData.current_medications
+      ? [
+          {
+            name: backendCaseData.current_medications,
+            dosage: '',
+            frequency: '',
+          },
+        ]
+      : [],
+
+    documents:
+      backendCase.documents || [],
+
+    status: frontendStatus,
+
+    doctorNotes:
+      review.notes || '',
+
+    createdAt:
+      backendCaseData.created_at ||
+      new Date().toISOString(),
+
+    backendCaseId: backendCase.case_id,
+  };
+}
 
 
 // =====================================================
@@ -355,15 +505,86 @@ function AppContent({
 
 export default function App() {
 
-  // Existing frontend cases
-  const [cases, setCases] = useState(
-    initialMockCases
-  );
+  // ===================================================
+  // REAL BACKEND CASES
+  // ===================================================
 
-  // Current patient intake
+  const [cases, setCases] = useState([]);
+
+  const [loadingCases, setLoadingCases] = useState(true);
+
+
+  // ===================================================
+  // CURRENT PATIENT INTAKE
+  // ===================================================
+
   const [currentCase, setCurrentCase] = useState(
     emptyCaseTemplate
   );
+
+
+  // ===================================================
+  // LOAD DOCTOR DASHBOARD
+  // ===================================================
+
+  useEffect(() => {
+
+    const loadDashboard = async () => {
+
+      try {
+
+        console.log(
+          'Loading doctor dashboard from backend...'
+        );
+
+        // Prototype doctor ID
+        const doctorId = 1;
+
+        const response =
+          await getDoctorDashboard(doctorId);
+
+        console.log(
+          'Doctor dashboard response:',
+          response
+        );
+
+        // Backend dashboard returns:
+        // doctor
+        // total_cases
+        // cases
+
+        const backendCases =
+          response.cases || [];
+
+        const formattedCases =
+          backendCases.map(convertBackendCase);
+
+        setCases(formattedCases);
+
+        console.log(
+          'Cases loaded:',
+          formattedCases
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Failed to load doctor dashboard:',
+          error
+        );
+
+        setCases([]);
+
+      } finally {
+
+        setLoadingCases(false);
+
+      }
+    };
+
+    loadDashboard();
+
+  }, []);
 
 
   // ===================================================
@@ -371,10 +592,12 @@ export default function App() {
   // ===================================================
 
   const updatePatientDetails = (details) => {
+
     setCurrentCase((prev) => ({
       ...prev,
       patientDetails: details,
     }));
+
   };
 
 
@@ -383,10 +606,12 @@ export default function App() {
   // ===================================================
 
   const updateChiefComplaint = (complaint) => {
+
     setCurrentCase((prev) => ({
       ...prev,
       chiefComplaint: complaint,
     }));
+
   };
 
 
@@ -395,10 +620,12 @@ export default function App() {
   // ===================================================
 
   const updateSymptoms = (symptoms) => {
+
     setCurrentCase((prev) => ({
       ...prev,
       symptoms,
     }));
+
   };
 
 
@@ -407,10 +634,12 @@ export default function App() {
   // ===================================================
 
   const updateAIQuestions = (aiQuestions) => {
+
     setCurrentCase((prev) => ({
       ...prev,
       aiQuestions,
     }));
+
   };
 
 
@@ -419,10 +648,12 @@ export default function App() {
   // ===================================================
 
   const updateMedicalHistory = (medicalHistory) => {
+
     setCurrentCase((prev) => ({
       ...prev,
       medicalHistory,
     }));
+
   };
 
 
@@ -431,10 +662,12 @@ export default function App() {
   // ===================================================
 
   const updateMedications = (medications) => {
+
     setCurrentCase((prev) => ({
       ...prev,
       medications,
     }));
+
   };
 
 
@@ -443,10 +676,12 @@ export default function App() {
   // ===================================================
 
   const updateDocuments = (documents) => {
+
     setCurrentCase((prev) => ({
       ...prev,
       documents,
     }));
+
   };
 
 
@@ -467,11 +702,11 @@ export default function App() {
       // 1. CREATE PATIENT + CASE
       // -------------------------------------------------
 
-      const result = await submitCase(
-        currentCase
-      );
+      const result =
+        await submitCase(currentCase);
 
-      const newCase = result.data;
+      const newCase =
+        result.data;
 
 
       // -------------------------------------------------
@@ -480,7 +715,6 @@ export default function App() {
 
       const caseId =
         newCase.backendCaseId;
-
 
       console.log(
         'Backend case created:',
@@ -507,7 +741,6 @@ export default function App() {
           of currentCase.documents
         ) {
 
-          // Make sure actual File object exists
           if (!document.file) {
 
             console.warn(
@@ -536,12 +769,14 @@ export default function App() {
             'Uploaded successfully:',
             document.name
           );
+
         }
+
       }
 
 
       // -------------------------------------------------
-      // 4. ADD CASE TO FRONTEND STATE
+      // 4. ADD NEW CASE TO UI
       // -------------------------------------------------
 
       setCases((prev) => [
@@ -551,7 +786,7 @@ export default function App() {
 
 
       // -------------------------------------------------
-      // 5. RESET INTAKE FORM
+      // 5. RESET FORM
       // -------------------------------------------------
 
       setCurrentCase(
@@ -564,7 +799,6 @@ export default function App() {
       );
 
 
-      // Return ID to CaseSummary
       return newCase.id;
 
     } catch (error) {
@@ -581,7 +815,9 @@ export default function App() {
 
 
       return null;
+
     }
+
   };
 
 
@@ -625,10 +861,13 @@ export default function App() {
         error
       );
 
+
       alert(
         'Failed to update doctor review.'
       );
+
     }
+
   };
 
 
@@ -640,7 +879,9 @@ export default function App() {
     <BrowserRouter>
 
       <AppContent
+
         currentCase={currentCase}
+
         cases={cases}
 
         updatePatientDetails={
@@ -678,6 +919,7 @@ export default function App() {
         updateDoctorNotes={
           handleUpdateDoctorNotes
         }
+
       />
 
     </BrowserRouter>

@@ -218,6 +218,25 @@ export async function getCaseById(caseId) {
 
 
 // =========================
+// GET DOCTOR DASHBOARD
+// =========================
+
+export async function getDoctorDashboard(doctorId) {
+  const response = await fetch(
+    `${API_BASE_URL}/doctors/${doctorId}/dashboard`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to fetch doctor dashboard"
+    );
+  }
+
+  return await response.json();
+}
+
+
+// =========================
 // UPDATE CASE STATUS
 // =========================
 
@@ -241,6 +260,13 @@ export async function updateCaseStatus(
   );
 
   if (!response.ok) {
+    const errorText = await response.text();
+
+    console.error(
+      "Case status update error:",
+      errorText
+    );
+
     throw new Error(
       "Failed to update case status"
     );
@@ -259,23 +285,120 @@ export async function updateCaseReview(
   { doctorNotes, status }
 ) {
 
-  // Update case status
+  // -------------------------------------------------
+  // FRONTEND STATUS → BACKEND STATUS
+  // -------------------------------------------------
+
+  const statusMap = {
+    "Pending Review": "pending",
+    "Reviewed": "verified",
+    "Urgent": "under_review",
+  };
+
+  const backendStatus =
+    statusMap[status] || "pending";
+
+
+  console.log(
+    "Saving doctor review:",
+    {
+      caseId,
+      doctorNotes,
+      frontendStatus: status,
+      backendStatus,
+    }
+  );
+
+
+  // -------------------------------------------------
+  // 1. UPDATE CASE STATUS
+  // -------------------------------------------------
+
   const statusResponse =
     await updateCaseStatus(
       caseId,
-      status
+      backendStatus
     );
+
+
+  console.log(
+    "Case status updated:",
+    statusResponse
+  );
+
+
+  // -------------------------------------------------
+  // 2. SAVE DOCTOR REVIEW
+  // -------------------------------------------------
+
+  const reviewResponse = await fetch(
+    `${API_BASE_URL}/reviews/`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify({
+        case_id: Number(caseId),
+
+        // Prototype doctor
+        doctor_id: 1,
+
+        notes: doctorNotes || "",
+
+        status: backendStatus,
+      }),
+    }
+  );
+
+
+  // -------------------------------------------------
+  // CHECK REVIEW RESPONSE
+  // -------------------------------------------------
+
+  if (!reviewResponse.ok) {
+
+    const errorText =
+      await reviewResponse.text();
+
+    console.error(
+      "Review API error:",
+      errorText
+    );
+
+    throw new Error(
+      "Failed to save doctor review"
+    );
+  }
+
+
+  const reviewData =
+    await reviewResponse.json();
+
+
+  console.log(
+    "Doctor review saved:",
+    reviewData
+  );
+
+
+  // -------------------------------------------------
+  // RETURN SUCCESS
+  // -------------------------------------------------
 
   return {
     success: true,
 
     message:
-      "Case review updated successfully.",
+      "Case review saved successfully.",
 
     data: {
       caseId,
       doctorNotes,
       status: statusResponse.status,
+      review: reviewData,
     },
   };
 }
